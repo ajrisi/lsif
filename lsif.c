@@ -65,6 +65,7 @@ int main(int argc, char **argv)
   char hostname[NI_MAXHOST] = {0};
   struct ifreq *item = NULL;
   struct sockaddr *addr;
+  socklen_t salen;
  
   /* Get a socket handle. */
   sck = socket(AF_INET, SOCK_DGRAM, 0);
@@ -97,10 +98,21 @@ int main(int argc, char **argv)
 	   item->ifr_name,
 	   get_ip_str(addr, ip, INET6_ADDRSTRLEN));
     
+    switch(addr->sa_family) {
+    case AF_INET:
+      salen = sizeof(struct sockaddr_in);
+      break;
+    case AF_INET6:
+      salen = sizeof(struct sockaddr_in6);
+      break;
+    default:
+      salen = 0;
+    }
+
     
     /* the call to get the mac address changes what is stored in the
        item, meaning that we need to determine the hostname now */
-    getnameinfo(addr, sizeof(*addr), hostname, sizeof(hostname), NULL, 0, NI_NAMEREQD);
+    getnameinfo(addr, salen, hostname, sizeof(hostname), NULL, 0, NI_NAMEREQD);
     
     
     /* Get the MAC address */
