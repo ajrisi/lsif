@@ -3,32 +3,52 @@
  * interfaces on a linux system. Now IPv6 friendly and updated to use
  * inet_ntop instead of the deprecated inet_ntoa function. This version
  * should not seg fault on newer linux systems
- * Authors: Adam Pierce, Adam Risi
- * Date: 10/09/2009
+ * Authors: 
+ *   Adam Pierce
+ *   Adam Risi
+ *   William Schaub
+ *
+ * Date: 11/11/2009
  * http://www.adamrisi.com
  * http://www.doctort.org/adam/
+ * http://teotwawki.steubentech.com/
  *
- * Previous file header follows:
- *
- * Example code to obtain IP and MAC for all available interfaces on
- * Linux.
- * by Adam Pierce <adam@doctort.org>
- * http://www.doctort.org/adam/
  */
-
+ 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h> 
+#include <arpa/inet.h>
 #include <sys/ioctl.h>
-#include <net/if.h>
+#if __MACH__ || __NetBSD__ || __OpenBSD__ || __FreeBSD__
+#include <sys/sysctl.h>
+#endif
+/* Include sockio.h if needed */
+#ifndef SIOCGIFCONF
+#include <sys/sockio.h>
+#endif
 #include <netinet/in.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
+#include <net/if.h>
+#include <netinet/if_ether.h>
+#if __MACH__
+#include <net/if_dl.h>
+#endif
 
+/* On platforms that have variable length 
+   ifreq use the old fixed length interface instead */
+#ifdef OSIOCGIFCONF
+#undef SIOCGIFCONF
+#define SIOCGIFCONF OSIOCGIFCONF
+#undef SIOCGIFADDR
+#define SIOCGIFADDR OSIOCGIFADDR
+#undef SIOCGIFBRDADDR
+#define SIOCGIFBRDADDR OSIOCGIFBRDADDR
+#endif
 
+#define fatal_perror(X) do { perror(X), exit(1); } while(0)
+ 
 /* 
  * this is straight from beej's network tutorial. It is a nice wrapper
  * for inet_ntop and helpes to make the program IPv6 ready
@@ -53,24 +73,24 @@ char *get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
  
   return s;
 }
-
-int main(int argc, char **argv)
+ 
+int main(void)
 {
-  char buf[1024] = {0};
-  struct ifconf ifc = {0};
-  struct ifreq *ifr = NULL;
-  int sck = 0;
-  int nInterfaces = 0;
-  int i = 0;
-  char hostname[NI_MAXHOST] = {0};
-  struct ifreq *item = NULL;
+  char            buf[8192] = {0};
+  struct ifconf   ifc = {0};
+  struct ifreq   *ifr = NULL;
+  int             sck = 0;
+  int             nInterfaces = 0;
+  int             i = 0;
+  char            ip[INET6_ADDRSTRLEN] = {0};
+  struct ifreq    *item;
   struct sockaddr *addr;
-  socklen_t salen;
+  struct sockaddr *broadcast_addr;
  
   /* Get a socket handle. */
-  sck = socket(AF_INET, SOCK_DGRAM, 0);
+  sck = socket(PF_INET, SOCK_DGRAM, 0);
   if(sck < 0) {
-    perror("socket");
+    fatal_perror("socket");
     return 1;
   }
  
@@ -78,68 +98,118 @@ int main(int argc, char **argv)
   ifc.ifc_len = sizeof(buf);
   ifc.ifc_buf = buf;
   if(ioctl(sck, SIOCGIFCONF, &ifc) < 0) {
-    perror("ioctl(SIOCGIFCONF)");
+    fatal_perror("ioctl(SIOCGIFCONF)");
     return 1;
   }
- 
   /* Iterate through the list of interfaces. */
   ifr = ifc.ifc_req;
-  nInterfaces = ifc.ifc_len / sizeof(struct ifreq);
-  for(i = 0; i < nInterfaces; i++) {
-    /* clear the hostname array */
-    memset(hostname, 0, sizeof(hostname));
-    
-    item = &ifr[i];
-    
-    /* Show the device name and IP address */
-    addr = &(item->ifr_addr);
-    char ip[INET6_ADDRSTRLEN];
-    printf("%s: IP %s",
-	   item->ifr_name,
-	   get_ip_str(addr, ip, INET6_ADDRSTRLEN));
-    
-    switch(addr->sa_family) {
-    case AF_INET:
-      salen = sizeof(struct sockaddr_in);
-      break;
-    case AF_INET6:
-      salen = sizeof(struct sockaddr_in6);
-      break;
-    default:
-      salen = 0;
-    }
+  nInterfaces = ifc.ifc_len / sizeof(struct ifreq); 
+  for(i = 0; i < nInterfaces; i++)
+    {
+      item = &ifr[i];
+ 
+      /* Show the device name and IP address */
+      addr = &(item->ifr_addr);
+      broadcast_addr = &(item->ifr_broadaddr);
 
-    
-    /* the call to get the mac address changes what is stored in the
-       item, meaning that we need to determine the hostname now */
-    getnameinfo(addr, salen, hostname, sizeof(hostname), NULL, 0, NI_NAMEREQD);
-    
-    
-    /* Get the MAC address */
+      /* Get the address 
+       * This may seem silly but it seems to be needed on some systems 
+       */
+      if(ioctl(sck, SIOCGIFADDR, item) < 0) {
+	fatal_perror("ioctl(OSIOCGIFADDR)");
+      }
+      printf("%s\t%s",
+	     item->ifr_name,
+	     get_ip_str(addr, ip, INET6_ADDRSTRLEN));
+      
+      /* Get the broadcast address */
+      if(ioctl(sck, SIOCGIFBRDADDR, item) < 0) {
+	fatal_perror("ioctl(SIOCGIFBRDADDR)");	
+      }
+
+      printf("\t%s", get_ip_str(broadcast_addr,ip,INET6_ADDRSTRLEN));
+ 
+      /* Lots of different ways to get the ethernet address */
+#ifdef SIOCGIFHWADDR
+/* Linux */
+      /* Get the MAC address */
       if(ioctl(sck, SIOCGIFHWADDR, item) < 0) {
-	perror("ioctl(SIOCGIFHWADDR)");
+	fatal_perror("ioctl(SIOCGIFHWADDR)");
 	return 1;
       }
-      
+ 
       /* display result */
-      printf(", MAC %.2x:%.2x:%.2x:%.2x:%.2x:%.2x, ",
+      printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n",
 	     (unsigned char)item->ifr_hwaddr.sa_data[0],
 	     (unsigned char)item->ifr_hwaddr.sa_data[1],
 	     (unsigned char)item->ifr_hwaddr.sa_data[2],
 	     (unsigned char)item->ifr_hwaddr.sa_data[3],
 	     (unsigned char)item->ifr_hwaddr.sa_data[4],
 	     (unsigned char)item->ifr_hwaddr.sa_data[5]);
-      
-      
-      if(hostname[0] != 0) {
-	printf("%s", hostname);
-      } else {
-	printf("NO_HOSTNAME");
+
+#elif SIOCGENADDR
+/* Solaris and possibly all SysVR4 */
+      /* Get the MAC address */
+      if(ioctl(sck, SIOCGENADDR, item) < 0) {
+	fatal_perror("ioctl(SIOCGENADDR)");
       }
+ 
+      /* display result */
+      printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+	     (unsigned char)item->ifr_enaddr[0],
+	     (unsigned char)item->ifr_enaddr[1],
+	     (unsigned char)item->ifr_enaddr[2],
+	     (unsigned char)item->ifr_enaddr[3],
+	     (unsigned char)item->ifr_enaddr[4],
+	     (unsigned char)item->ifr_enaddr[5]);
+
+#elif __MACH__ || __NetBSD__ || __OpenBSD__ || __FreeBSD__
+/* MacOS X and all modern BSD implementations (I hope) */
+      int                mib[6] = {0};
+      int                len = 0;
+      char               *macbuf; 
+      struct if_msghdr   *ifm;
+      struct sockaddr_dl *sdl;
+      unsigned char      ptr[];
+
+      mib[0] = CTL_NET;
+      mib[1] = AF_ROUTE;
+      mib[2] = 0;
+      mib[3] = AF_LINK;
+      mib[4] = NET_RT_IFLIST;
+      mib[5] = if_nametoindex(item->ifr_name);
+      if(mib[5] == 0)
+	continue;
+
+      if(sysctl(mib, 6, NULL, (size_t*)&len, NULL, 0) != 0) {
+	fatal_perror("sysctl");
+      }
+
+      macbuf = (char *) malloc(len);
+      if(macbuf == NULL) {
+	fprintf(stderr, "Unable to allocate necessary memory: %d\n", len);
+	exit(1);
+      }
+
+      if(sysctl(mib, 6, macbuf, (size_t*)&len, NULL, 0) != 0) {
+	fatal_perror("sysctl");
+      }
+
+      ifm = (struct if_msghdr *)macbuf;
+      sdl = (struct sockaddr_dl *)(ifm + 1);
+      ptr = (unsigned char *)LLADDR(sdl);
+
+      printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n", 
+	     ptr[0], ptr[1], ptr[2], 
+	     ptr[3], ptr[4], ptr[5]);
+
+      free(macbuf);
       
-      printf("\n");
-      
-  }
-  
+#else
+#error OS Distribution Not Recognized
+#endif
+
+    }
+ 
   return 0;
 }
