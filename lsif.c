@@ -86,7 +86,6 @@ int main(void)
   char            ip[INET6_ADDRSTRLEN] = {0};
   struct ifreq    *item;
   struct sockaddr *addr;
-  struct sockaddr *broadcast_addr;
   socklen_t       salen;
   char            hostname[NI_MAXHOST];
 
@@ -113,23 +112,7 @@ int main(void)
     
     /* Show the device name and IP address */
     addr = &(item->ifr_addr);
-    broadcast_addr = &(item->ifr_broadaddr);
-    
-    /* Get the address 
-     * This may seem silly but it seems to be needed on some systems 
-     */
-    if(ioctl(sck, SIOCGIFADDR, item) < 0) {
-      fatal_perror("ioctl(OSIOCGIFADDR)");
-    }
-    printf("%s\t%s",
-	   item->ifr_name,
-	   get_ip_str(addr, ip, INET6_ADDRSTRLEN));
-    
-    /* Get the broadcast address */
-    if(ioctl(sck, SIOCGIFBRDADDR, item) < 0) {
-      fatal_perror("ioctl(SIOCGIFBRDADDR)");	
-    }
-    
+
     switch(addr->sa_family) {
     case AF_INET:
       salen = sizeof(struct sockaddr_in);
@@ -146,7 +129,15 @@ int main(void)
     getnameinfo(addr, salen, hostname, sizeof(hostname), NULL, 0, NI_NAMEREQD);
 
 
-    printf("\t%s", get_ip_str(broadcast_addr,ip,INET6_ADDRSTRLEN));
+    /* Get the address 
+     * This may seem silly but it seems to be needed on some systems 
+     */
+    if(ioctl(sck, SIOCGIFADDR, item) < 0) {
+      fatal_perror("ioctl(OSIOCGIFADDR)");
+    }
+    printf("%s %s",
+	   item->ifr_name,
+	   get_ip_str(addr, ip, INET6_ADDRSTRLEN));
     
     /* Lots of different ways to get the ethernet address */
 #ifdef SIOCGIFHWADDR
@@ -158,7 +149,7 @@ int main(void)
     }
     
     /* display result */
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x",
+    printf(" %02x:%02x:%02x:%02x:%02x:%02x",
 	   (unsigned char)item->ifr_hwaddr.sa_data[0],
 	   (unsigned char)item->ifr_hwaddr.sa_data[1],
 	   (unsigned char)item->ifr_hwaddr.sa_data[2],
@@ -174,7 +165,7 @@ int main(void)
     }
     
     /* display result */
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x",
+    printf(" %02x:%02x:%02x:%02x:%02x:%02x",
 	   (unsigned char)item->ifr_enaddr[0],
 	   (unsigned char)item->ifr_enaddr[1],
 	   (unsigned char)item->ifr_enaddr[2],
@@ -218,7 +209,7 @@ int main(void)
     sdl = (struct sockaddr_dl *)(ifm + 1);
     ptr = (unsigned char *)LLADDR(sdl);
 
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x", 
+    printf(" %02x:%02x:%02x:%02x:%02x:%02x", 
 	   ptr[0], ptr[1], ptr[2], 
 	   ptr[3], ptr[4], ptr[5]);
 
@@ -228,7 +219,7 @@ int main(void)
 #error OS Distribution Not Recognized
 #endif
 
-    printf("\t%s\n", hostname);
+    printf(" %s\n", hostname);
 
   }
  
