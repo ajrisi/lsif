@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <sys/ioctl.h>
 #if __MACH__ || __NetBSD__ || __OpenBSD__ || __FreeBSD__
 #include <sys/sysctl.h>
@@ -87,7 +88,7 @@ int main(void)
   struct sockaddr *addr;
   struct sockaddr *broadcast_addr;
   socklen_t       salen;
-  char            hostname[1024];
+  char            hostname[NI_MAXHOST];
 
   /* Get a socket handle. */
   sck = socket(PF_INET, SOCK_DGRAM, 0);
@@ -107,7 +108,7 @@ int main(void)
   ifr = ifc.ifc_req;
   nInterfaces = ifc.ifc_len / sizeof(struct ifreq); 
   for(i = 0; i < nInterfaces; i++) {
-    bzero(hostname, 1024);
+    bzero(hostname, NI_MAXHOST);
     item = &ifr[i];
     
     /* Show the device name and IP address */
@@ -157,7 +158,7 @@ int main(void)
     }
     
     /* display result */
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+    printf("\t%02x:%02x:%02x:%02x:%02x:%02x",
 	   (unsigned char)item->ifr_hwaddr.sa_data[0],
 	   (unsigned char)item->ifr_hwaddr.sa_data[1],
 	   (unsigned char)item->ifr_hwaddr.sa_data[2],
@@ -173,7 +174,7 @@ int main(void)
     }
     
     /* display result */
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n",
+    printf("\t%02x:%02x:%02x:%02x:%02x:%02x",
 	   (unsigned char)item->ifr_enaddr[0],
 	   (unsigned char)item->ifr_enaddr[1],
 	   (unsigned char)item->ifr_enaddr[2],
@@ -205,7 +206,7 @@ int main(void)
 
     macbuf = (char *) malloc(len);
     if(macbuf == NULL) {
-      fprintf(stderr, "Unable to allocate necessary memory: %d\n", len);
+      fprintf(stderr, "\nUnable to allocate necessary memory: %d\n", len);
       exit(1);
     }
 
@@ -217,7 +218,7 @@ int main(void)
     sdl = (struct sockaddr_dl *)(ifm + 1);
     ptr = (unsigned char *)LLADDR(sdl);
 
-    printf("\t%02x:%02x:%02x:%02x:%02x:%02x\n", 
+    printf("\t%02x:%02x:%02x:%02x:%02x:%02x", 
 	   ptr[0], ptr[1], ptr[2], 
 	   ptr[3], ptr[4], ptr[5]);
 
@@ -226,6 +227,8 @@ int main(void)
 #else
 #error OS Distribution Not Recognized
 #endif
+
+    printf("\t%s\n", hostname);
 
   }
  
