@@ -3,6 +3,9 @@
  * interfaces on a linux system. Now IPv6 friendly and updated to use
  * inet_ntop instead of the deprecated inet_ntoa function. This version
  * should not seg fault on newer linux systems
+ *
+ * Version 2.0
+ *
  * Authors: 
  *   Adam Pierce
  *   Adam Risi
